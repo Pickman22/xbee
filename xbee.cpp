@@ -70,12 +70,16 @@ void Xbee::set_checksum(remote_at_cmd_rq_t &msg) {
 }
 
 void Xbee::on_ready_read() {
-    std::vector<u_int8_t> dat;
-    if(bytesAvailable()) { // If there's data available to be read.
+    int bytes = bytesAvailable();
+    qDebug() << "Bytes available: " << bytes;
+    if(bytes > 0) { // If there's data available to be read.
+        std::vector<u_int8_t> dat;
+        qDebug() << "Reading bytes...";
         QByteArray arr = readAll();
         dat = std::vector<u_int8_t>(arr.data(), arr.data() + arr.length());
+        parse_data(dat);
     }
-    parse_data(dat);
+    //parse_data(dat);
 }
 
 void Xbee::parse_data(std::vector<u_int8_t> &data) {
@@ -84,6 +88,7 @@ void Xbee::parse_data(std::vector<u_int8_t> &data) {
         case 0:
             if(*it == header_flag) {
                 state++;
+                //qDebug() << "Got start...";
             } else {
                 //qDebug() << "Waiting for start flag, got " << *it << " instead";
             }
@@ -99,17 +104,26 @@ void Xbee::parse_data(std::vector<u_int8_t> &data) {
         case 2:
             length = *it;
             state++;
+            //qDebug() << "Length of message: " << length;
             break;
         default:
             if(length--) {
                 buffer.push_back(*it);
+                //qDebug() << "new data: " << hex << *it;
+                //qDebug() << "count: " << length;
                 mcheck += *it;
-            } else if((mcheck + *it) == 0){
+            } else if ((0xff - mcheck == *it)) {
+                //qDebug() << "end of message...";
                 emit message_ready();
                 state = 0;
                 length = 0;
                 mcheck = 0;
                 buffer.clear();
+            } else {
+                //qDebug() << "Corrupted message...";
+                state = 0;
+                length = 0;
+                mcheck = 0;
             }
         }
     }
